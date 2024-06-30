@@ -2,20 +2,16 @@ import json
 import boto3
 import redis
 import os
+import logging
 import datetime
 from sqlalchemy.orm import Session
 from config import config
-# from schemas import UserCreate, MessageCreate, BlockCreate, GroupCreate, GroupMemberCreate, Message, ChatMetadataCreate
-# from crud import (
-#     get_user_by_email, create_user, get_user_chats, 
-#     create_message,
-#     create_block,
-#     create_group, add_user_to_group, remove_user_from_group,
-#     get_chat_metadata, create_chat_metadata, update_chat_metadata
-# )
 from database import *
 from schemas import MessageCreate, UserCreate, BlockCreate, GroupCreate, GroupMemberCreate
 from crud import *
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
 
 s3 = boto3.client('s3', endpoint_url=config.S3_ENDPOINT_URL)
 redis_client = redis.StrictRedis(
@@ -52,14 +48,8 @@ def backup_and_delete_old_messages(user_id: str, chat_id: str):
     for message in messages:
         messages_table.delete_item(Key={'message_id': message['message_id']})
 
-# def backup_and_delete_old_messages_sqlite(db: Session, user_id: str, chat_id: str):
-#     messages = db.query(Message).filter(Message.sender_id == user_id, Message.receiver_id == chat_id).all()
-#     messages_data = [message.dict() for message in messages]
-#     save_to_s3(user_id, chat_id, messages_data)
-#     db.query(Message).filter(Message.sender_id == user_id, Message.receiver_id == chat_id).delete()
-#     db.commit()
-
 def lambda_handler(event, context):
+    logger.info("Received event: %s", event)
     path = event['path']
     http_method = event['httpMethod']
     body = json.loads(event['body']) if 'body' in event else {}
