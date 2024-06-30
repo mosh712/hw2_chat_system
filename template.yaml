@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Lambda functions for messaging system
+
+Resources:
+  MessagingFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      CodeUri: app/
+      Environment:
+        Variables:
+          REDIS_HOST: "host.docker.internal"
+          REDIS_PORT: 6379
+          DYNAMODB_ENDPOINT_URL: "http://host.docker.internal:8000"
+          S3_ENDPOINT_URL: "http://host.docker.internal:4566"
+          CACHE_LAST_X_MESSAGES: "10"
+          DB_LAST_Y_MESSAGES: "50"
+          S3_RETENTION_DAYS: "365"
+          DB_LIMIT: "1000"
+      Events:
+        RegisterUser:
+          Type: Api
+          Properties:
+            Path: /register
+            Method: post
+        SendMessage:
+          Type: Api
+          Properties:
+            Path: /send_message
+            Method: post
+        BlockUser:
+          Type: Api
+          Properties:
+            Path: /block_user
+            Method: post
+        CreateGroup:
+          Type: Api
+          Properties:
+            Path: /create_group
+            Method: post
+        AddUserToGroup:
+          Type: Api
+          Properties:
+            Path: /add_user_to_group
+            Method: post
+        RemoveUserFromGroup:
+          Type: Api
+          Properties:
+            Path: /remove_user_from_group
+            Method: post
+
+  BackupFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: backup_lambda_function.lambda_handler
+      Runtime: python3.8
+      CodeUri: app/
+      Environment:
+        Variables:
+          S3_BUCKET_NAME: "cold_storage"
+          DB_RETENTION_HOURS: "24"
+          S3_RETENTION_DAYS: "365"
+      Events:
+        BackupEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
