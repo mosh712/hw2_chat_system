@@ -254,21 +254,3 @@ def lambda_handler(event, context):
         "statusCode": 404,
         "body": json.dumps({"detail": "Not Found"})
     }
-
-if __name__ == "__main__":
-    json_data = []
-    folder_path = './local_debug/events'
-    for filename in os.listdir(folder_path):
-        if filename.endswith('.json'):
-            file_path = os.path.join(folder_path, filename)
-            with open(file_path, 'r') as file:
-                try:
-                    data = json.load(file)
-                    json_data.append(data)
-                except json.JSONDecodeError as e:
-                    print(f"Error reading JSON file {file_path}: {e}")
-
-    
-    events = json_data
-    for event in events:
-        print(lambda_handler(event, []))

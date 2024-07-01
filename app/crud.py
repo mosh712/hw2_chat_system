@@ -25,6 +25,10 @@ def get_user(user_id):
     response = users_table.get_item(Key={'user_id': user_id})
     return response.get('Item')
 
+def get_all_users():
+    response = users_table.table.scan()
+    return response
+
 def get_user_by_email(email):
     response = users_table.scan(
         FilterExpression=Key('email').eq(email)
