@@ -212,6 +212,44 @@ def lambda_handler(event, context):
                 "body": "Group ID not found."
             }
 
+    ### TODO Fix and adjust
+    if path == "/send_message_to_group" and http_method == "POST":
+        try:
+            message_data = json.loads(body)
+            message_data['message_id'] = str(uuid4())
+            message_data['timestamp'] = datetime.now(timezone.utc).isoformat()
+            group_id = message_data.pop('group_id')
+            logger.info("Creating message for group %s: %s", group_id, message_data)
+            create_message_for_group(message_data, group_id)
+            logger.info("Message created for group %s", group_id)
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"detail": "Message sent to group"})
+            }
+        except Exception as e:
+            logger.error("Error processing request: %s", e)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"detail": "Internal server error"})
+            }
+
+    if path == "/get_messages" and http_method == "GET":
+        try:
+            user_id = event['queryStringParameters']['user_id']
+            logger.info("Fetching messages for user %s", user_id)
+            messages = get_messages_for_user(user_id)
+            logger.info("Messages fetched for user %s", user_id)
+            return {
+                "statusCode": 200,
+                "body": json.dumps(messages)
+            }
+        except Exception as e:
+            logger.error("Error fetching messages: %s", e)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"detail": "Internal server error"})
+            }
+
     return {
         "statusCode": 404,
         "body": json.dumps({"detail": "Not Found"})

@@ -126,3 +126,20 @@ def get_group_members(group_id):
         KeyConditionExpression=Key('group_id').eq(group_id)
     )
     return response['Items']
+
+def get_messages_for_user(user_id):
+    response = messages_table.query(
+        IndexName='receiver_id-index',
+        KeyConditionExpression=Key('receiver_id').eq(user_id)
+    )
+    items = response['Items']
+    for item in items:
+        item['timestamp'] = datetime.fromisoformat(item['timestamp'])
+    return items
+
+def create_message_for_group(message, group_id):
+    members = get_group_members(group_id)
+    for member in members:
+        message_copy = message.copy()
+        message_copy['receiver_id'] = member['user_id']
+        create_message(message_copy)

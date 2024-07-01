@@ -163,3 +163,10 @@ cython_debug/
 
 local_debug/
 .aws-sam/
+.terraform/
+.terraform*
+terraform*
+packages/
+myenv/
+include/
+.DS_Store
