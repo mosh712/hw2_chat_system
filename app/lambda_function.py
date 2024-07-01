@@ -3,7 +3,7 @@ import boto3
 import redis
 import os
 import logging
-import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from config import config
 from database import *
@@ -32,7 +32,7 @@ def get_cache_key(user_id, chat_id):
     return f"{user_id}:chat:{chat_id}"
 
 def save_to_s3(user_id, chat_id, messages):
-    now = datetime.utcnow()
+    now = datetime.now()
     year = now.year
     day_of_year = now.timetuple().tm_yday
     hour = now.hour
@@ -54,8 +54,6 @@ def lambda_handler(event, context):
     http_method = event['httpMethod']
     body = json.loads(event['body']) if 'body' in event else {}
 
-    # db: Session = SessionLocal()
-
     if path == "/register" and http_method == "POST":
         body['user_id'] = str(uuid4())
         user = UserCreate(**body)
@@ -68,15 +66,30 @@ def lambda_handler(event, context):
         new_user = create_user(user.model_dump())
         response = {
             "statusCode": 200,
-            "body": json.dumps(new_user)
+            "body": json.dumps(new_user),
+            "user_id": body['user_id']
         }
         return response
 
     if path == "/send_message" and http_method == "POST":
+        body['message_id'] = str(uuid4()) 
+        body['timestamp'] = datetime.now(timezone.utc).isoformat() 
         message = MessageCreate(**body)
+        #Validate that users exists
+        if (not get_user(body['sender_id']) and not get_user(body['receiver_id'])):
+            return {
+                "statusCode": 404,
+                "body": "One of the users not exists"
+            } 
+        #Validate that sender is not blocked
+        elif (get_block(body['sender_id'], body['receiver_id'])):
+            return {
+                "statusCode": 403,
+                "body": "Message been blocked by user"
+            } 
+        
         cache_key = get_cache_key(message.sender_id, message.receiver_id)
         chat_data = redis_client.get(cache_key)
-
         if chat_data:
             chat_data = json.loads(chat_data)
         else:
@@ -92,7 +105,9 @@ def lambda_handler(event, context):
                 chat_data["messages"] = user_chats[message.receiver_id][-X:]
 
         # Update chat data
-        chat_data["messages"].append(message.model_dump())
+        message_model_dump = message.model_dump()
+        message_model_dump['timestamp'] = message_model_dump['timestamp'].isoformat()
+        chat_data["messages"].append(message_model_dump)
         if len(chat_data["messages"]) > X:
             chat_data["messages"].pop(0)
 
@@ -127,6 +142,18 @@ def lambda_handler(event, context):
         }
 
     if path == "/block_user" and http_method == "POST":
+        body['block_id'] = str(uuid4())
+        body_keys = body.keys()
+        if 'blocked_id' not in body_keys or 'blocker_id' not in body_keys:
+            return {
+                "statusCode": 404,
+                "body": "One of the users is not exist"
+            }
+        elif (not get_user(body['sender_id']) and not get_user(body['receiver_id'])):
+            return {
+                "statusCode": 404,
+                "body": "One of the users not exists"
+            } 
         block = BlockCreate(**body)
         new_block = create_block(block.model_dump())
         return {
@@ -135,31 +162,75 @@ def lambda_handler(event, context):
         }
 
     if path == "/create_group" and http_method == "POST":
+        body['group_id'] = str(uuid4())
         group = GroupCreate(**body)
         new_group = create_group(group.model_dump())
-        return {
-            "statusCode": 200,
-            "body": json.dumps(new_group)
-        }
+        #Add the creator to the group.
+        creator_id = body.get("creator_id")
+        if creator_id != None:
+            group_member = GroupMemberCreate(**{"group_id": body['group_id'], "user_id":creator_id})
+            new_group_member = add_user_to_group(group_member.model_dump())
+            if new_group_member == None:
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps(new_group),
+                    "group_id": body['group_id'],
+                    "creator_id": creator_id
+                }
+        else:
+            return {
+                "statusCode": 200,
+                "body": json.dumps(new_group),
+                "group_id": body['group_id']
+            }
 
     if path == "/add_user_to_group" and http_method == "POST":
         group_member = GroupMemberCreate(**body)
         new_group_member = add_user_to_group(group_member.model_dump())
-        return {
-            "statusCode": 200,
-            "body": json.dumps(new_group_member)
-        }
+        if new_group_member != None:
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"detail": "User added to group"})
+            }
+        else:
+            return {
+                "statusCode": 404,
+                "body": "Group ID not found."
+            }
 
     if path == "/remove_user_from_group" and http_method == "POST":
         group_id = body.get("group_id")
         user_id = body.get("user_id")
-        remove_user_from_group(group_id, user_id)
-        return {
-            "statusCode": 200,
-            "body": json.dumps({"detail": "User removed from group"})
-        }
+        if remove_user_from_group(group_id, user_id):
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"detail": "User removed from group"})
+            }
+        else:
+            return {
+                "statusCode": 404,
+                "body": "Group ID not found."
+            }
 
     return {
         "statusCode": 404,
         "body": json.dumps({"detail": "Not Found"})
     }
+
+if __name__ == "__main__":
+    json_data = []
+    folder_path = './local_debug/events'
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.json'):
+            file_path = os.path.join(folder_path, filename)
+            with open(file_path, 'r') as file:
+                try:
+                    data = json.load(file)
+                    json_data.append(data)
+                except json.JSONDecodeError as e:
+                    print(f"Error reading JSON file {file_path}: {e}")
+
+    
+    events = json_data
+    for event in events:
+        print(lambda_handler(event, []))

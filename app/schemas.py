@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from datetime import datetime, timezone
 
 class UserBase(BaseModel):
     email: str
@@ -17,7 +18,7 @@ class MessageBase(BaseModel):
     sender_id: str
     receiver_id: str
     content: str
-    timestamp: int
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class MessageCreate(MessageBase):
     message_id: str

@@ -8,14 +8,17 @@ dynamodb = boto3.resource(
     region_name=config.DYNAMODB_REGION
 )
 
-def create_table(table_name, key_schema, attribute_definitions, provisioned_throughput):
+def create_table(table_name, key_schema, attribute_definitions, provisioned_throughput, global_secondary_indexes=None):
     try:
-        table = dynamodb.create_table(
-            TableName=table_name,
-            KeySchema=key_schema,
-            AttributeDefinitions=attribute_definitions,
-            ProvisionedThroughput=provisioned_throughput
-        )
+        params =  {
+            'TableName': table_name,
+            'KeySchema': key_schema,
+            'AttributeDefinitions': attribute_definitions,
+            'ProvisionedThroughput': provisioned_throughput
+        }
+        if global_secondary_indexes:
+            params['GlobalSecondaryIndexes'] = global_secondary_indexes
+        table = dynamodb.create_table(**params)
         table.meta.client.get_waiter('table_exists').wait(TableName=table_name)
         print(f"Table {table_name} created successfully.")
     except ClientError as e:
@@ -25,6 +28,7 @@ def create_table(table_name, key_schema, attribute_definitions, provisioned_thro
             print(f"Unexpected error: {e}")
 
 def init_db():
+    #Create users table
     create_table(
             table_name='users',
             key_schema=[
@@ -44,6 +48,7 @@ def init_db():
                 'WriteCapacityUnits': 5
             }
         )
+    #Create messages table
     create_table(
         table_name='messages',
         key_schema=[
@@ -56,13 +61,36 @@ def init_db():
             {
                 'AttributeName': 'message_id',
                 'AttributeType': 'S'
+            }, 
+            {
+                'AttributeName': 'sender_id',
+                'AttributeType': 'S'
             }
         ],
         provisioned_throughput={
             'ReadCapacityUnits': 5,
             'WriteCapacityUnits': 5
-        }
+        }, 
+        global_secondary_indexes=[
+            {
+                'IndexName': 'sender_id-index',
+                'KeySchema': [
+                    {
+                        'AttributeName': 'sender_id',
+                        'KeyType': 'HASH'
+                    }
+                ],
+                'Projection': {
+                    'ProjectionType': 'ALL'
+                },
+                'ProvisionedThroughput': {
+                    'ReadCapacityUnits': 5,
+                    'WriteCapacityUnits': 5
+                }
+            }
+        ]
     )
+    #Create chat metadata table
     create_table(
         table_name='chat_metadata',
         key_schema=[
@@ -82,6 +110,7 @@ def init_db():
             'WriteCapacityUnits': 5
         }
     )
+    #Create group members table
     create_table(
         table_name='group_members',
         key_schema=[
@@ -109,6 +138,7 @@ def init_db():
             'WriteCapacityUnits': 5
         }
     )
+    #Create groups table
     create_table(
         table_name='groups',
         key_schema=[
@@ -128,6 +158,7 @@ def init_db():
             'WriteCapacityUnits': 5
         }
     )
+    #Create blocks members table
     create_table(
         table_name='blocks',
         key_schema=[

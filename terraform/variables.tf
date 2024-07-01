@@ -1,3 +1,3 @@
 variable "region" {
-  default = "us-west-1"
+  default = "us-east-1"
 }
