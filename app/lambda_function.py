@@ -63,7 +63,7 @@ def lambda_handler(event, context):
                 "statusCode": 400,
                 "body": json.dumps({"detail": "Email already registered"})
             }
-        new_user = create_user(user.model_dump())
+        new_user = create_user(user.dict())
         response = {
             "statusCode": 200,
             "body": json.dumps(new_user),
@@ -105,7 +105,7 @@ def lambda_handler(event, context):
                 chat_data["messages"] = user_chats[message.receiver_id][-X:]
 
         # Update chat data
-        message_model_dump = message.model_dump()
+        message_model_dump = message.dict()
         message_model_dump['timestamp'] = message_model_dump['timestamp'].isoformat()
         chat_data["messages"].append(message_model_dump)
         if len(chat_data["messages"]) > X:
@@ -114,7 +114,7 @@ def lambda_handler(event, context):
         redis_client.set(cache_key, json.dumps(chat_data), ex=3600)
 
         # Save to DB and S3
-        new_message = create_message(message.model_dump())
+        new_message = create_message(message.dict())
         chat_metadata = get_chat_metadata(cache_key)
         if not chat_metadata:
             create_chat_metadata({
@@ -149,13 +149,13 @@ def lambda_handler(event, context):
                 "statusCode": 404,
                 "body": "One of the users is not exist"
             }
-        elif (not get_user(body['sender_id']) and not get_user(body['receiver_id'])):
+        elif (not get_user(body['blocked_id']) and not get_user(body['blocker_id'])):
             return {
                 "statusCode": 404,
                 "body": "One of the users not exists"
             } 
         block = BlockCreate(**body)
-        new_block = create_block(block.model_dump())
+        new_block = create_block(block.dict())
         return {
             "statusCode": 200,
             "body": json.dumps(new_block)
@@ -164,12 +164,12 @@ def lambda_handler(event, context):
     if path == "/create_group" and http_method == "POST":
         body['group_id'] = str(uuid4())
         group = GroupCreate(**body)
-        new_group = create_group(group.model_dump())
+        new_group = create_group(group.dict())
         #Add the creator to the group.
         creator_id = body.get("creator_id")
         if creator_id != None:
             group_member = GroupMemberCreate(**{"group_id": body['group_id'], "user_id":creator_id})
-            new_group_member = add_user_to_group(group_member.model_dump())
+            new_group_member = add_user_to_group(group_member.dict())
             if new_group_member == None:
                 return {
                     "statusCode": 200,
@@ -186,7 +186,7 @@ def lambda_handler(event, context):
 
     if path == "/add_user_to_group" and http_method == "POST":
         group_member = GroupMemberCreate(**body)
-        new_group_member = add_user_to_group(group_member.model_dump())
+        new_group_member = add_user_to_group(group_member.dict())
         if new_group_member != None:
             return {
                 "statusCode": 200,
@@ -254,3 +254,21 @@ def lambda_handler(event, context):
         "statusCode": 404,
         "body": json.dumps({"detail": "Not Found"})
     }
+
+if __name__ == "__main__":
+    json_data = []
+    folder_path = './local_debug/events'
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.json'):
+            file_path = os.path.join(folder_path, filename)
+            with open(file_path, 'r') as file:
+                try:
+                    data = json.load(file)
+                    json_data.append(data)
+                except json.JSONDecodeError as e:
+                    print(f"Error reading JSON file {file_path}: {e}")
+
+    
+    events = json_data
+    for event in events:
+        print(lambda_handler(event, []))

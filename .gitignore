@@ -170,3 +170,4 @@ packages/
 myenv/
 include/
 .DS_Store
+*zip
